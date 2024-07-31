@@ -6,11 +6,12 @@ df = pd.read_csv('your_data.csv')
 cleaner = DataClean(detect_binary=True, normalize=True)
 cleaned_df = cleaner.clean(df)
 
-python datacleaner.py input_file.csv --output_file cleaned_data.csv --detect_binary --normalize --verbose
+python datacleaner.py input_file.csv --output_filename cleaned_data.csv --detect_binary --normalize --verbose
 """
 
 import argparse
 import logging
+import os
 from typing import Any, Union
 
 import dateutil.parser
@@ -174,16 +175,14 @@ class DataClean:
         if self.config['na_strategy'] == "remove_row":
             df = df.dropna()
             self.logger.info("Removed rows with NA values")
-        elif self.config['advanced_imputation']:
-            if is_training:
-                self.imputer = IterativeImputer(random_state=42)
-                df = pd.DataFrame(self.imputer.fit_transform(df), columns=df.columns)
-            else:
-                df = pd.DataFrame(self.imputer.transform(df), columns=df.columns)
-            self.logger.info("Handled NA values using advanced imputation")
         else:
+            # Separate datetime columns
+            datetime_columns = df.select_dtypes(include=['datetime64']).columns
+            non_datetime_columns = df.columns.difference(datetime_columns)
+
+            # Handle non-datetime columns
             for column, strategy in self.config['column_specific_imputation'].items():
-                if column in df.columns:
+                if column in non_datetime_columns:
                     if is_training:
                         imputer = SimpleImputer(strategy=strategy)
                         df[[column]] = imputer.fit_transform(df[[column]])
@@ -191,8 +190,10 @@ class DataClean:
                         df[[column]] = imputer.transform(df[[column]])
                     self.logger.info(f"Imputed column {column} using strategy: {strategy}")
 
-            # Handle remaining columns with global strategy
-            remaining_columns = [col for col in df.columns if col not in self.config['column_specific_imputation']]
+            # Handle remaining non-datetime columns with global strategy
+            remaining_columns = [
+                col for col in non_datetime_columns if col not in self.config['column_specific_imputation']
+            ]
             if remaining_columns:
                 if is_training:
                     self.global_imputer = SimpleImputer(strategy=self.config['na_strategy'])
@@ -200,8 +201,19 @@ class DataClean:
                 else:
                     df[remaining_columns] = self.global_imputer.transform(df[remaining_columns])
                 self.logger.info(
-                    f"Handled NA values for remaining columns using strategy: {self.config['na_strategy']}"
+                    f"Handled NA values for remaining non-datetime columns ({remaining_columns}) using strategy: {self.config['na_strategy']}"
                 )
+
+            # Handle datetime columns
+            for column in datetime_columns:
+                if df[column].isnull().any():
+                    if is_training:
+                        # For datetime columns, use forward fill, then backward fill
+                        df[column] = df[column].fillna(method='ffill').fillna(method='bfill')
+                    else:
+                        df[column] = df[column].fillna(method='ffill').fillna(method='bfill')
+                    self.logger.info(f"Imputed datetime column {column} using forward and backward fill")
+
         return df
 
     def _select_features(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
@@ -286,7 +298,7 @@ class DataClean:
 def main():
     parser = argparse.ArgumentParser(description="Data Cleaner")
     parser.add_argument("input_file", type=str, help="Input CSV file path")
-    parser.add_argument("--output_file", type=str, help="Output CSV file path")
+    parser.add_argument("--output_filename", type=str, help="Output CSV file path")
     parser.add_argument("--detect_binary", action="store_true", help="Detect and convert binary columns")
     parser.add_argument(
         "--numeric_dtype",
@@ -337,11 +349,17 @@ def main():
     cleaned_df = cleaner.clean(df)
 
     # Save or display the results
-    if args.output_file:
-        cleaned_df.to_csv(args.output_file, index=False)
-        print(f"Cleaned data saved to {args.output_file}")
+    if args.output_filename:
+        output_file = args.output_filename
     else:
-        print(cleaned_df)
+        input_file_name = os.path.basename(args.input_file)
+        input_file_base, input_file_ext = os.path.splitext(input_file_name)
+        output_file = f"{input_file_base}_cleaned{input_file_ext}"
+        output_file = os.path.join(os.path.dirname(args.input_file), output_file)
+
+    # Save the results
+    cleaned_df.to_csv(output_file, index=False)
+    print(f"Cleaned data saved to {output_file}")
 
 
 if __name__ == "__main__":
