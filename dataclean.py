@@ -93,7 +93,6 @@ class DataClean:
         # Make a copy of the DataFrame to avoid modifying the original
         df = df.copy()
 
-
         df = self._remove_columns(df)
         df = self._convert_datetime(df)
 
