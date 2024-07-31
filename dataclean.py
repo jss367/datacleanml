@@ -37,6 +37,8 @@ class DataClean:
             'advanced_imputation': False,
             'feature_selection': False,
             'n_features_to_select': 10,
+            'remove_correlated': False,
+            'correlation_threshold': 0.95,
         }
         self.config.update(config)
         self.verbose = verbose
@@ -69,6 +71,7 @@ class DataClean:
             (self._normalize, self.config['normalize']),
             (self._feature_engineering, True),
             (self._select_features, self.config['feature_selection'] and is_training),
+            (self._remove_correlated_features, self.config['remove_correlated']),
         ]
 
         # Use tqdm for progress tracking if verbose
@@ -228,9 +231,29 @@ class DataClean:
 
         return df
 
+    def _remove_correlated_features(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
+        """Remove highly correlated features."""
+        if not is_training:
+            return df
+
+        numeric_df = df.select_dtypes(include=[np.number])
+        corr_matrix = numeric_df.corr().abs()
+        upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+        to_drop = [
+            column for column in upper_tri.columns if any(upper_tri[column] > self.config['correlation_threshold'])
+        ]
+
+        if to_drop:
+            df = df.drop(to_drop, axis=1)
+            self.logger.info(f"Removed {len(to_drop)} highly correlated features: {', '.join(to_drop)}")
+        else:
+            self.logger.info("No highly correlated features found to remove.")
+
+        return df
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Improved Data Cleaner")
+    parser = argparse.ArgumentParser(description="Data Cleaner")
     parser.add_argument("input_file", type=str, help="Input CSV file path")
     parser.add_argument("--output_file", type=str, help="Output CSV file path")
     parser.add_argument("--detect_binary", action="store_true", help="Detect and convert binary columns")
@@ -250,6 +273,14 @@ def main():
     parser.add_argument("--normalize", action="store_true", help="Normalize non-binary numeric columns")
     parser.add_argument("--datetime_columns", nargs="+", help="List of datetime column names")
     parser.add_argument("--remove_columns", nargs="+", help="List of columns to remove")
+    parser.add_argument("--remove_correlated", action="store_true", help="Remove highly correlated features")
+    parser.add_argument(
+        "--correlation_threshold",
+        type=float,
+        default=0.95,
+        help="Threshold for correlation above which features will be removed",
+    )
+
     parser.add_argument("--verbose", action="store_true", help="Print progress information")
 
     args = parser.parse_args()
@@ -265,6 +296,8 @@ def main():
         'normalize': args.normalize,
         'datetime_columns': args.datetime_columns or [],
         'remove_columns': args.remove_columns or [],
+        'remove_correlated': args.remove_correlated,
+        'correlation_threshold': args.correlation_threshold,
     }
 
     # Read input CSV
