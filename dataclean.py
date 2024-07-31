@@ -1,10 +1,28 @@
+"""
+from dataclean import DataClean
+import pandas as pd
+
+df = pd.read_csv('your_data.csv')
+cleaner = DataClean(detect_binary=True, normalize=True)
+cleaned_df = cleaner.clean(df)
+
+python datacleaner.py input_file.csv --output_file cleaned_data.csv --detect_binary --normalize --verbose
+"""
 import argparse
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
-
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.impute import SimpleImputer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
+from sklearn.ensemble import IsolationForest
+from typing import Optional, Union
+import logging
 from typing import Optional, Union
 import logging
 
@@ -20,6 +38,10 @@ class DataClean:
         datetime_columns: list[str] = [],
         remove_columns: list[str] = [],
         verbose: bool = True,
+        handle_outliers: bool = False,
+        advanced_imputation: bool = False,
+        feature_selection: bool = False,
+        n_features_to_select: int = 10
     ):
         """
         Initialize DataClean with various cleaning options.
@@ -41,6 +63,10 @@ class DataClean:
         self.datetime_columns = datetime_columns
         self.remove_columns = remove_columns
         self.verbose = verbose
+        self.handle_outliers = handle_outliers
+        self.advanced_imputation = advanced_imputation
+        self.feature_selection = feature_selection
+        self.n_features_to_select = n_features_to_select
         self.logger = self._setup_logger()
 
     def _setup_logger(self):
@@ -67,13 +93,10 @@ class DataClean:
         # Make a copy of the DataFrame to avoid modifying the original
         df = df.copy()
 
-        # Remove unwanted columns
-        df = self._remove_columns(df)
 
-        # Convert datetime columns
+        df = self._remove_columns(df)
         df = self._convert_datetime(df)
 
-        # Detect and convert binary columns
         if self.detect_binary:
             df = self._detect_binary(df)
 
@@ -81,16 +104,19 @@ class DataClean:
         if self.numeric_dtype:
             df = self._convert_numeric(df)
 
-        # Handle NA values
+        if self.handle_outliers:
+            df = self._handle_outliers(df)
+
         df = self._handle_na(df, is_training)
 
-        # Perform one-hot encoding
         if self.one_hot:
             df = self._one_hot_encode(df)
 
-        # Normalize non-binary numeric columns
         if self.normalize:
             df = self._normalize(df, is_training)
+
+        if self.feature_selection and is_training:
+            df = self._select_features(df)
 
         self.logger.info("Data cleaning process completed.")
         return df
@@ -131,11 +157,26 @@ class DataClean:
                     pass  # Column can't be converted to numeric
         return df
 
+    def _handle_outliers(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Handle outliers using Isolation Forest."""
+        numeric_columns = df.select_dtypes(include=[np.number]).columns
+        iso_forest = IsolationForest(contamination=0.1, random_state=42)
+        outliers = iso_forest.fit_predict(df[numeric_columns])
+        df = df[outliers != -1]
+        self.logger.info("Removed outliers using Isolation Forest")
+        return df
+
     def _handle_na(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
-        """Handle NA values based on the specified strategy."""
         if self.na_strategy == "remove_row":
             df = df.dropna()
             self.logger.info("Removed rows with NA values")
+        elif self.advanced_imputation:
+            if is_training:
+                self.imputer = IterativeImputer(random_state=42)
+                df = pd.DataFrame(self.imputer.fit_transform(df), columns=df.columns)
+            else:
+                df = pd.DataFrame(self.imputer.transform(df), columns=df.columns)
+            self.logger.info("Handled NA values using advanced imputation")
         else:
             if is_training:
                 self.imputer = SimpleImputer(strategy=self.na_strategy)
@@ -143,6 +184,19 @@ class DataClean:
             else:
                 df = pd.DataFrame(self.imputer.transform(df), columns=df.columns)
             self.logger.info(f"Handled NA values using strategy: {self.na_strategy}")
+        return df
+
+    def _select_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Perform feature selection using correlation with target."""
+        if 'target' not in df.columns:
+            self.logger.warning("Target column not found. Skipping feature selection.")
+            return df
+        
+        correlations = df.corr()['target'].abs().sort_values(ascending=False)
+        selected_features = correlations.nlargest(self.n_features_to_select + 1).index.tolist()
+        selected_features.remove('target')
+        df = df[selected_features + ['target']]
+        self.logger.info(f"Selected top {self.n_features_to_select} features based on correlation with target")
         return df
 
     def _one_hot_encode(self, df: pd.DataFrame) -> pd.DataFrame:
