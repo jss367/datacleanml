@@ -65,29 +65,37 @@ class DataClean:
 
         # Define operations
         operations = [
-            (self._remove_columns, True),
-            (self._convert_datetime, True),
-            (self._detect_binary, self.config['detect_binary']),
-            (self._convert_numeric, self.config['numeric_dtype']),
-            (self._handle_outliers, self.config['handle_outliers']),
-            (self._handle_na, True),
-            (self._one_hot_encode, self.config['one_hot']),
-            (self._normalize, self.config['normalize']),
-            (self._feature_engineering, True),
-            (self._select_features, self.config['feature_selection'] and is_training),
-            (self._remove_correlated_features, self.config['remove_correlated']),
+            (self._remove_columns, True, "Remove specified columns"),
+            (self._convert_datetime, True, "Convert datetime columns"),
+            (self._detect_binary, self.config['detect_binary'], "Detect and convert binary columns"),
+            (self._convert_numeric, self.config['numeric_dtype'], "Convert to numeric dtypes"),
+            (self._handle_outliers, self.config['handle_outliers'], "Handle outliers"),
+            (self._handle_na, True, "Handle NA values"),
+            (self._one_hot_encode, self.config['one_hot'], "Perform one-hot encoding"),
+            (self._normalize, self.config['normalize'], "Normalize non-binary numeric columns"),
+            (self._feature_engineering, True, "Perform feature engineering"),
+            (self._select_features, self.config['feature_selection'] and is_training, "Select features"),
+            (self._remove_correlated_features, self.config['remove_correlated'], "Remove correlated features"),
         ]
 
+        performed_operations = []
+        excluded_operations = []
+
         # Use tqdm for progress tracking if verbose
-        for operation, condition in tqdm(operations, disable=not self.verbose):
+        for operation, condition, description in tqdm(operations, disable=not self.verbose):
             if condition:
                 try:
                     df = operation(df, is_training)
+                    performed_operations.append(description)
                 except Exception as e:
                     self.logger.error(f"Error in {operation.__name__}: {str(e)}")
                     raise
+            else:
+                excluded_operations.append(description)
 
         self.logger.info("Data cleaning process completed.")
+        self.logger.info(f"Performed operations: {', '.join(performed_operations)}")
+        self.logger.info(f"Excluded operations: {', '.join(excluded_operations)}")
         return df
 
     def _validate_input(self, df: pd.DataFrame, is_training: bool) -> None:
@@ -172,9 +180,19 @@ class DataClean:
         return df
 
     def _handle_na(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
+        changed_columns = []
+        unchanged_columns = []
+
         if self.config['na_strategy'] == "remove_row":
+            initial_rows = len(df)
             df = df.dropna()
-            self.logger.info("Removed rows with NA values")
+            rows_removed = initial_rows - len(df)
+            if rows_removed > 0:
+                self.logger.info(f"Removed {rows_removed} rows with NA values")
+                changed_columns = df.columns.tolist()
+            else:
+                self.logger.info("No rows with NA values found")
+                unchanged_columns = df.columns.tolist()
         else:
             # Separate datetime columns
             datetime_columns = df.select_dtypes(include=['datetime64']).columns
@@ -183,26 +201,34 @@ class DataClean:
             # Handle non-datetime columns
             for column, strategy in self.config['column_specific_imputation'].items():
                 if column in non_datetime_columns:
-                    if is_training:
-                        imputer = SimpleImputer(strategy=strategy)
-                        df[[column]] = imputer.fit_transform(df[[column]])
+                    if df[column].isnull().any():
+                        if is_training:
+                            imputer = SimpleImputer(strategy=strategy)
+                            df[[column]] = imputer.fit_transform(df[[column]])
+                        else:
+                            df[[column]] = imputer.transform(df[[column]])
+                        self.logger.info(f"Imputed column {column} using strategy: {strategy}")
+                        changed_columns.append(column)
                     else:
-                        df[[column]] = imputer.transform(df[[column]])
-                    self.logger.info(f"Imputed column {column} using strategy: {strategy}")
+                        unchanged_columns.append(column)
 
             # Handle remaining non-datetime columns with global strategy
             remaining_columns = [
                 col for col in non_datetime_columns if col not in self.config['column_specific_imputation']
             ]
             if remaining_columns:
-                if is_training:
-                    self.global_imputer = SimpleImputer(strategy=self.config['na_strategy'])
-                    df[remaining_columns] = self.global_imputer.fit_transform(df[remaining_columns])
-                else:
-                    df[remaining_columns] = self.global_imputer.transform(df[remaining_columns])
-                self.logger.info(
-                    f"Handled NA values for remaining non-datetime columns ({remaining_columns}) using strategy: {self.config['na_strategy']}"
-                )
+                columns_with_na = df[remaining_columns].columns[df[remaining_columns].isnull().any()].tolist()
+                if columns_with_na:
+                    if is_training:
+                        self.global_imputer = SimpleImputer(strategy=self.config['na_strategy'])
+                        df[remaining_columns] = self.global_imputer.fit_transform(df[remaining_columns])
+                    else:
+                        df[remaining_columns] = self.global_imputer.transform(df[remaining_columns])
+                    self.logger.info(
+                        f"Handled NA values for remaining non-datetime columns ({columns_with_na}) using strategy: {self.config['na_strategy']}"
+                    )
+                    changed_columns.extend(columns_with_na)
+                unchanged_columns.extend([col for col in remaining_columns if col not in columns_with_na])
 
             # Handle datetime columns
             for column in datetime_columns:
@@ -213,6 +239,14 @@ class DataClean:
                     else:
                         df[column] = df[column].fillna(method='ffill').fillna(method='bfill')
                     self.logger.info(f"Imputed datetime column {column} using forward and backward fill")
+                    changed_columns.append(column)
+                else:
+                    unchanged_columns.append(column)
+
+        self.logger.info(f"Columns which had NA: {', '.join(changed_columns) if changed_columns else 'None'}")
+        self.logger.info(
+            f"Columns which didn't have NA: {', '.join(unchanged_columns) if unchanged_columns else 'None'}"
+        )
 
         return df
 
@@ -314,6 +348,7 @@ def main():
         help="Strategy for handling NA values",
     )
     parser.add_argument("--normalize", action="store_true", help="Normalize non-binary numeric columns")
+    parser.add_argument("--handle_outliers", action="store_true")
     parser.add_argument("--datetime_columns", nargs="+", help="List of datetime column names")
     parser.add_argument("--remove_columns", nargs="+", help="List of columns to remove")
     parser.add_argument("--remove_correlated", action="store_true", help="Remove highly correlated features")
