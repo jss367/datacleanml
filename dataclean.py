@@ -97,7 +97,7 @@ class DataClean:
 
     def _remove_columns(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
         """Remove specified columns from the DataFrame."""
-        for col in self.remove_columns:
+        for col in self.config['remove_columns']:
             if col in df.columns:
                 df = df.drop(columns=col)
                 self.logger.info(f"Removed column: {col}")
@@ -105,7 +105,7 @@ class DataClean:
 
     def _convert_datetime(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
         """Convert specified columns to datetime dtype."""
-        for col in self.datetime_columns:
+        for col in self.config['datetime_columns']:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors="coerce")
                 self.logger.info(f"Converted column to datetime: {col}")
