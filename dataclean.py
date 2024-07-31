@@ -16,6 +16,7 @@ from typing import Any, Union
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import IsolationForest
+from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from tqdm import tqdm
@@ -57,7 +58,7 @@ class DataClean:
         self.logger.info("Starting data cleaning process...")
 
         # Input validation
-        self._validate_input(df)
+        self._validate_input(df, is_training)
 
         # Define operations
         operations = [
@@ -299,9 +300,6 @@ def main():
         'remove_correlated': args.remove_correlated,
         'correlation_threshold': args.correlation_threshold,
     }
-
-    # Read input CSV
-    df = pd.read_csv(args.input_file)
 
     # Initialize and run the data cleaner
     cleaner = DataClean(config=config, verbose=args.verbose)
