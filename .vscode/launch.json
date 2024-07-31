@@ -11,7 +11,11 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": [
-                "/Users/julius/git/algo_trade/data/earn_pg_train.csv",
+                // "/Users/julius/git/algo_trade/data/earn_pg_train.csv",
+                "/Users/julius/git/algo_trade/data/earn_pg_train_and_val_all_to_20240723.csv",
+                "--remove_columns",
+                "ID",
+                "r_rnet",
                 "--verbose"
             ]
         }

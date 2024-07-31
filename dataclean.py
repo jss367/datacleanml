@@ -13,8 +13,10 @@ import argparse
 import logging
 from typing import Any, Union
 
+import dateutil.parser
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_datetime64_any_dtype
 from sklearn.ensemble import IsolationForest
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
@@ -90,8 +92,6 @@ class DataClean:
     def _validate_input(self, df: pd.DataFrame, is_training: bool) -> None:
         if df.empty:
             raise ValueError("Input DataFrame is empty")
-        if is_training and 'target' not in df.columns:
-            self.logger.warning("Target column not found. Some operations may be skipped.")
         if set(self.config['datetime_columns']).difference(df.columns):
             self.logger.warning("Some specified datetime columns are not in the DataFrame")
 
@@ -101,15 +101,45 @@ class DataClean:
             if col in df.columns:
                 df = df.drop(columns=col)
                 self.logger.info(f"Removed column: {col}")
+            else:
+                self.logger.warning(f"Requested column for removal not found: {col}")
         return df
 
-    def _convert_datetime(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
-        """Convert specified columns to datetime dtype."""
+    def _convert_datetime_manual(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
+        """Convert specified columns to datetime dtype.
+        DEPRECATED
+        """
         for col in self.config['datetime_columns']:
             if col in df.columns:
                 df[col] = pd.to_datetime(df[col], errors="coerce")
                 self.logger.info(f"Converted column to datetime: {col}")
         return df
+
+    def _convert_datetime(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
+        """Automatically detect and convert datetime columns."""
+        for col in df.columns:
+            if not is_datetime64_any_dtype(df[col]):
+                # Check if the column contains string data
+                if df[col].dtype == 'object':
+                    try:
+                        # Try to parse a sample of non-null values
+                        sample = df[col].dropna().sample(min(5, len(df[col].dropna()))).tolist()
+                        if all(self._is_date(val) for val in sample):
+                            df[col] = pd.to_datetime(df[col], errors='coerce')
+                            self.logger.info(f"Automatically converted column to datetime: {col}")
+                    except (ValueError, TypeError):
+                        # If conversion fails, skip this column
+                        pass
+        return df
+
+    @staticmethod
+    def _is_date(string):
+        """Check if a string can be parsed as a date."""
+        try:
+            dateutil.parser.parse(string)
+            return True
+        except (ValueError, TypeError):
+            return False
 
     def _detect_binary(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
         """Detect and convert binary columns to 0 and 1."""
