@@ -43,7 +43,9 @@ class DataClean:
             'n_features_to_select': 10,
             'remove_correlated': False,
             'correlation_threshold': 0.95,
+            'skip_normalize': [],
         }
+
         self.config.update(config)
         self.verbose = verbose
         self.logger = self._setup_logger()
@@ -272,17 +274,25 @@ class DataClean:
         return df
 
     def _normalize(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
-        """Normalize non-binary numeric columns."""
+        """Normalize non-binary numeric columns, except those specified in skip_normalize."""
         numeric_columns = df.select_dtypes(include=[np.number]).columns
         numeric_columns = [col for col in numeric_columns if df[col].nunique() > 2]
 
-        if is_training:
-            self.scaler = StandardScaler()
-            df[numeric_columns] = self.scaler.fit_transform(df[numeric_columns])
-        else:
-            df[numeric_columns] = self.scaler.transform(df[numeric_columns])
+        # Exclude columns specified in skip_normalize
+        columns_to_normalize = [col for col in numeric_columns if col not in self.config['skip_normalize']]
 
-        self.logger.info("Normalized non-binary numeric columns")
+        if columns_to_normalize:
+            if is_training:
+                self.scaler = StandardScaler()
+                df[columns_to_normalize] = self.scaler.fit_transform(df[columns_to_normalize])
+            else:
+                df[columns_to_normalize] = self.scaler.transform(df[columns_to_normalize])
+
+            self.logger.info(f"Normalized non-binary numeric columns: {', '.join(columns_to_normalize)}")
+
+        if self.config['skip_normalize']:
+            self.logger.info(f"Skipped normalization for columns: {', '.join(self.config['skip_normalize'])}")
+
         return df
 
     def _feature_engineering(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
@@ -358,6 +368,7 @@ def main():
         default=0.95,
         help="Threshold for correlation above which features will be removed",
     )
+    parser.add_argument("--skip_normalize", nargs="+", help="List of columns to skip during normalization")
 
     parser.add_argument("--verbose", action="store_true", help="Print progress information")
 
@@ -376,6 +387,7 @@ def main():
         'remove_columns': args.remove_columns or [],
         'remove_correlated': args.remove_correlated,
         'correlation_threshold': args.correlation_threshold,
+        'skip_normalize': args.skip_normalize or [],
     }
 
     # Initialize and run the data cleaner
