@@ -1,12 +1,12 @@
 """
-from dataclean import DataClean
+from datacleanml import DataCleanML
 import pandas as pd
 
 df = pd.read_csv('your_data.csv')
-cleaner = DataClean(detect_binary=True, normalize=True)
+cleaner = DataCleanML(detect_binary=True, normalize=True)
 cleaned_df = cleaner.clean(df)
 
-python datacleaner.py input_file.csv --output_filename cleaned_data.csv --detect_binary --normalize --verbose
+python datacleanml.py input_file.csv --output_filename cleaned_data.csv --detect_binary --normalize --verbose
 """
 
 import argparse
@@ -25,7 +25,7 @@ from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from tqdm import tqdm
 
 
-class DataClean:
+class DataCleanML:
     def __init__(self, config: dict[str, Union[bool, str, list[str], dict[str, Any]]] = {}, verbose: bool = True):
         self.config = {
             'detect_binary': True,
@@ -51,7 +51,7 @@ class DataClean:
         self.logger = self._setup_logger()
 
     def _setup_logger(self):
-        logger = logging.getLogger("DataClean")
+        logger = logging.getLogger("DataCleanML")
         logger.setLevel(logging.INFO if self.verbose else logging.WARNING)
         handler = logging.StreamHandler()
         formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -391,7 +391,7 @@ def main():
     }
 
     # Initialize and run the data cleaner
-    cleaner = DataClean(config=config, verbose=args.verbose)
+    cleaner = DataCleanML(config=config, verbose=args.verbose)
 
     cleaned_df = cleaner.clean(df)
 
