@@ -163,7 +163,7 @@ class DataCleanML:
     def _convert_numeric(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
         """Attempt to convert columns to numeric dtypes."""
         for col in df.columns:
-            if col not in self.datetime_columns:
+            if col not in self.config['datetime_columns']:
                 try:
                     df[col] = pd.to_numeric(df[col], errors="raise")
                     self.logger.info(f"Converted column to numeric: {col}")
