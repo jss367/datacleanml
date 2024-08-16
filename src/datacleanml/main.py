@@ -19,8 +19,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_datetime64_any_dtype
 from sklearn.ensemble import IsolationForest
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer, SimpleImputer
+from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from tqdm import tqdm
 
