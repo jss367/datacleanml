@@ -1,3 +1,3 @@
-# DataClean
+# DataCleanML
 
-Automatically cleans your data
+Automatically cleans your data for machine learning tasks
