@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "datacleanml"
-version = "0.1.1"
+version = "0.1.2"
 authors = [
   { name="Julius Simonelli", email="julius.simonelli@gmail.com" },
 ]
