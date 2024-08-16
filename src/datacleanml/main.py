@@ -58,7 +58,7 @@ class DataCleanML:
         logger.addHandler(handler)
         return logger
 
-    def clean(self, df: pd.DataFrame, is_training: bool = True) -> pd.DataFrame:
+    def clean(self, df: pd.DataFrame, is_training: bool = True, save_path: str = None) -> pd.DataFrame:
         self.logger.info("Starting data cleaning process...")
 
         # Input validation
@@ -97,6 +97,11 @@ class DataCleanML:
         self.logger.info("Data cleaning process completed.")
         self.logger.info(f"Performed operations: {', '.join(performed_operations)}")
         self.logger.info(f"Excluded operations: {', '.join(excluded_operations)}")
+
+        if save_path:
+            df.to_csv(save_path, index=False)
+            self.logger.info(f"Cleaned data saved to {save_path}")
+
         return df
 
     def _validate_input(self, df: pd.DataFrame, is_training: bool) -> None:
@@ -368,7 +373,6 @@ def main():
         help="Threshold for correlation above which features will be removed",
     )
     parser.add_argument("--skip_normalize", nargs="+", help="List of columns to skip during normalization")
-
     parser.add_argument("--verbose", action="store_true", help="Print progress information")
 
     args = parser.parse_args()
