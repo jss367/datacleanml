@@ -107,8 +107,9 @@ class DataCleanML:
     def _validate_input(self, df: pd.DataFrame, is_training: bool) -> None:
         if df.empty:
             raise ValueError("Input DataFrame is empty")
-        if set(self.config['datetime_columns']).difference(df.columns):
-            self.logger.warning("Some specified datetime columns are not in the DataFrame")
+        unused_datetime_cols = set(self.config['datetime_columns']).difference(df.columns)
+        if unused_datetime_cols:
+            self.logger.warning("Specified datetime column(s) not in the DataFrame: %s", unused_datetime_cols)
 
     def _remove_columns(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
         """Remove specified columns from the DataFrame."""
