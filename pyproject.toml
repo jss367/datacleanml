@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "datacleanml"
-version = "0.1.4"
+version = "0.1.5"
 authors = [
   { name="Julius Simonelli", email="julius.simonelli@gmail.com" },
 ]
@@ -22,6 +22,7 @@ dependencies = [
     "scikit-learn",
     "python-dateutil",
     "tqdm",
+    "tomli"
 ]
 
 [project.urls]

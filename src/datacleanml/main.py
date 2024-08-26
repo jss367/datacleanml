@@ -23,6 +23,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from tqdm import tqdm
 
+from datacleanml.version import __version__
+
 
 class DataCleanML:
     def __init__(self, config: dict[str, Union[bool, str, list[str], dict[str, Any]]] = {}, verbose: bool = True):
@@ -59,7 +61,7 @@ class DataCleanML:
         return logger
 
     def clean(self, df: pd.DataFrame, is_training: bool = True, save_path: str = None) -> pd.DataFrame:
-        self.logger.info("Starting data cleaning process...")
+        self.logger.info(f"Starting data cleaning process... (datacleanml v{__version__})")
 
         # Input validation
         self._validate_input(df, is_training)
