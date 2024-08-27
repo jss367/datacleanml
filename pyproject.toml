@@ -4,10 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "datacleanml"
-version = "0.1.5"
-authors = [
-  { name="Julius Simonelli", email="julius.simonelli@gmail.com" },
-]
+version = "0.2.1"
+authors = [{ name = "Julius Simonelli", email = "julius.simonelli@gmail.com" }]
 description = "A package for cleaning tabular data in preparation for machine learning"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -22,7 +20,7 @@ dependencies = [
     "scikit-learn",
     "python-dateutil",
     "tqdm",
-    "tomli"
+    "tomli",
 ]
 
 [project.urls]

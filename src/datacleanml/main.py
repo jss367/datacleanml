@@ -23,8 +23,6 @@ from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import PolynomialFeatures, StandardScaler
 from tqdm import tqdm
 
-from datacleanml.version import __version__
-
 
 class DataCleanML:
     def __init__(self, config: dict[str, Union[bool, str, list[str], dict[str, Any]]] = {}, verbose: bool = True):
@@ -45,6 +43,7 @@ class DataCleanML:
             'remove_correlated': False,
             'correlation_threshold': 0.95,
             'skip_normalize': [],
+            'extract_date_info': True,
         }
 
         self.config.update(config)
@@ -61,7 +60,7 @@ class DataCleanML:
         return logger
 
     def clean(self, df: pd.DataFrame, is_training: bool = True, save_path: str = None) -> pd.DataFrame:
-        self.logger.info(f"Starting data cleaning process... (datacleanml v{__version__})")
+        self.logger.info(f"Starting data cleaning process...")
 
         # Input validation
         self._validate_input(df, is_training)
@@ -79,6 +78,7 @@ class DataCleanML:
             (self._feature_engineering, True, "Perform feature engineering"),
             (self._select_features, self.config['feature_selection'] and is_training, "Select features"),
             (self._remove_correlated_features, self.config['remove_correlated'], "Remove correlated features"),
+            (self._extract_date_info, self.config['extract_date_info'], "Extract date info"),
         ]
 
         performed_operations = []
@@ -109,9 +109,20 @@ class DataCleanML:
     def _validate_input(self, df: pd.DataFrame, is_training: bool) -> None:
         if df.empty:
             raise ValueError("Input DataFrame is empty")
-        unused_datetime_cols = set(self.config['datetime_columns']).difference(df.columns)
+
+        # Ensure datetime_columns is a list
+        datetime_columns = self.config['datetime_columns']
+        if isinstance(datetime_columns, str):
+            datetime_columns = [datetime_columns]
+        elif not isinstance(datetime_columns, list):
+            datetime_columns = list(datetime_columns)
+
+        unused_datetime_cols = set(datetime_columns) - set(df.columns)
         if unused_datetime_cols:
             self.logger.warning("Specified datetime column(s) not in the DataFrame: %s", unused_datetime_cols)
+
+        # Update the config with the list version
+        self.config['datetime_columns'] = datetime_columns
 
     def _remove_columns(self, df: pd.DataFrame, is_training: bool) -> pd.DataFrame:
         """Remove specified columns from the DataFrame."""
@@ -345,6 +356,27 @@ class DataCleanML:
 
         return df
 
+    def _extract_date_info(self, df: pd.DataFrame, is_training: bool):
+        # Convert 'Date' column to datetime if it's not already
+        df['Date'] = pd.to_datetime(df['Date'])
+
+        df['Year'] = df['Date'].dt.year
+        df['Month'] = df['Date'].dt.month
+        df['Day'] = df['Date'].dt.day
+        df['DayOfWeek'] = df['Date'].dt.dayofweek
+        df['Quarter'] = df['Date'].dt.quarter
+        df['IsWeekend'] = df['Date'].dt.dayofweek.isin([5, 6]).astype(int)
+        df['DayOfYear'] = df['Date'].dt.dayofyear
+        df['WeekOfYear'] = df['Date'].dt.isocalendar().week
+
+        df['IsMonthStart'] = df['Date'].dt.is_month_start.astype(int)
+        df['IsMonthEnd'] = df['Date'].dt.is_month_end.astype(int)
+
+        # Drop the original 'Date' column
+        # df = df.drop(['Date'], axis=1)
+
+        return df
+
 
 def main():
     parser = argparse.ArgumentParser(description="Data Cleaner")
@@ -376,6 +408,7 @@ def main():
         help="Threshold for correlation above which features will be removed",
     )
     parser.add_argument("--skip_normalize", nargs="+", help="List of columns to skip during normalization")
+    parser.add_argument("--extract_date_info", action="store_true")
     parser.add_argument("--verbose", action="store_true", help="Print progress information")
 
     args = parser.parse_args()
